@@ -1,215 +1,148 @@
 --[[
-    Script: Auto-Claim All Free Forever Pack Items
-    Description: Based on the discovery of ForeverPackClient, this script
-                 will automatically try to claim all free items from the pack.
+    Script: Farming Game Hub
+    Description: A feature-rich script for the farming game, providing autofarming,
+    teleports, and player modifications.
+    UI Library: Tora-Library by liebertsx
 ]]
 
--- Access the game's framework and services
-local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
-local ForeverPackService = Knit.GetService("ForeverPackService")
-local claimRemote = ForeverPackService.Claim -- This is the RemoteEvent we need
+-- Load the Tora UI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
 
--- --- Configuration ---
--- A list of all the item IDs we want to try and claim.
--- Based on your screenshot, the free items are in slots 2, 3, and 4.
-local freeItemIDs = {2, 3, 4} 
+-- Create the main window for the script
+local window = library:CreateWindow("Farming Game Hub")
 
-local checkInterval = 30 -- Check every 30 seconds to be safe.
+--================================================================
+-- Main Farming Tab
+--================================================================
+local mainTab = window:AddFolder("Main")
 
-print("Auto-Claim for ALL FREE Forever Pack items is running.")
-
--- The main loop that will run forever
-task.spawn(function()
-    while true do
-        print("Attempting to claim free Forever Pack rewards...")
-        
-        -- Loop through our list of free item IDs
-        for _, itemID in ipairs(freeItemIDs) do
-            -- Fire the remote event for each free item.
-            -- The server will grant the item if the cooldown is over.
-            claimRemote:Fire(itemID)
-            task.wait(0.1) -- Small delay between each attempt
+-- Toggle for Auto Collecting Plants
+local autoCollectEnabled = false
+mainTab:AddToggle({
+    text = "Auto Collect All Plants",
+    flag = "autoCollectToggle",
+    callback = function(value)
+        autoCollectEnabled = value
+        if value then
+            print("Auto Collect Enabled")
+        else
+            print("Auto Collect Disabled")
         end
-        
-        print("Claim attempt finished. Waiting for the next check in " .. checkInterval .. " seconds.")
-        task.wait(checkInterval)
+    end
+})
+
+-- Continuously check and collect plants if the toggle is enabled
+task.spawn(function()
+    while task.wait(0.5) do
+        if autoCollectEnabled and workspace:FindFirstChild("Plant") then
+            -- Loop through every plant in the "Plant" folder in the workspace
+            for _, plantInstance in pairs(workspace.Plant:GetChildren()) do
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.TakePlant:FireServer(plantInstance)
+                end)
+                task.wait() -- Small delay to prevent spamming the server
+            end
+        end
     end
 end)
 
--- This script is now much more powerful because it targets all the free items.
--- You can add this to your main GUI script.--[[
-    Script: Planting Simulator Helper (v2)
-    Description: A comprehensive GUI for a planting game, with corrected and new features.
-    Credits to the Tora Library creator.
-]]
-
--- Load the UI Library
-local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
-
--- Create the main window
-local window = library:CreateWindow("Planting Sim Helper")
-
--- =================================================================
--- Farming Tab
--- =================================================================
-local farmingFolder = window:AddFolder("Farming")
-
--- State variables to control the loops
-local autoBuyActive = false
-local autoCollectActive = false
-local autoPlantActive = false
-
--- ### Auto Plant (New) ###
--- This will repeatedly plant at the specific coordinates you found.
-farmingFolder:AddToggle({
-    text = "Auto Plant (At Fixed Spot)",
-    flag = "autoplant_toggle",
-    callback = function(v)
-        autoPlantActive = v
-        if not v then return end
-
-        task.spawn(function()
-            while autoPlantActive do
-                -- Arguments for the specific planting location
-                local args = {
-                    [1] = Vector3.new(34.431583404541016, 4.777867794036865, -89.13500213623047),
-                    [2] = Vector3.new(-0.7385618686676025, -0.6741790771484375, -0.0030036750249564648)
-                }
-                game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.Item:FireServer(unpack(args))
-                task.wait(0.5) -- Delay to prevent server overload
-            end
-        end)
-    end
-})
-
--- ### Auto Collect (Fixed) ###
--- This now correctly iterates through each plant instance.
-farmingFolder:AddToggle({
-    text = "Auto Collect All",
-    flag = "autocollect_toggle",
-    callback = function(v)
-        autoCollectActive = v
-        if not v then return end
-
-        task.spawn(function()
-            while autoCollectActive do
-                if workspace:FindFirstChild("Plant") then
-                    -- Loop through every plant model in the 'Plant' folder
-                    for _, plant in ipairs(workspace.Plant:GetChildren()) do
-                        if not autoCollectActive then break end -- Stop if toggle is turned off
-                        
-                        game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.TakePlant:FireServer(plant)
-                        task.wait() -- Small delay between each collection
-                    end
-                end
-                task.wait(1) -- Wait 1 second before checking for new plants again
-            end
-        end)
-    end
-})
-
--- ### Sell All ###
-farmingFolder:AddButton({
+-- Button to Sell All items in your inventory
+mainTab:AddButton({
     text = "Sell All Items",
-    flag = "sellall_button",
+    flag = "sellAllButton",
     callback = function()
-        game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RF.Sell:InvokeServer()
-        print("Sell All command sent to server.")
+        print("Attempting to sell all items...")
+        pcall(function()
+            game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RF.Sell:InvokeServer()
+        end)
+        print("Sell command sent.")
     end
 })
 
-
--- =================================================================
--- Store Tab
--- =================================================================
-local storeFolder = window:AddFolder("Store")
-
-local seedList = {
+-- Dropdown list for buying seeds
+local seedTypes = {
     "Grass", "Sunflower", "Carrot", "Blueberry", "Strawberry", "Corn",
     "Apple", "Bamboo", "Eggplant", "Pineapple", "Tomato", "Pumpkin",
     "Banana", "Coconut", "Peach", "Grape", "Nasturtium", "Papaya"
 }
-local selectedSeed = seedList[1] -- Default to Grass
 
--- ### Buy All Seeds (New Suggestion) ###
--- This button will loop through the list and buy one of each seed.
-storeFolder:AddButton({
-    text = "Buy All Seeds (1 of each)",
-    flag = "buyall_button",
-    callback = function()
-        task.spawn(function()
-            print("Starting to buy all seeds...")
-            for _, seedName in ipairs(seedList) do
-                local args = { [1] = seedName }
-                game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RE.Purchase:FireServer(unpack(args))
-                print("Attempted to purchase: " .. seedName)
-                task.wait(0.2) -- Small delay between purchases
-            end
-            print("Finished buying all seeds.")
+mainTab:AddList({
+    text = "Buy Seed",
+    values = seedTypes,
+    flag = "buySeedList",
+    callback = function(seedName)
+        print("Attempting to purchase seed:", seedName)
+        pcall(function()
+            game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RE.Purchase:FireServer(seedName)
         end)
+        print("Purchase command sent for:", seedName)
     end
 })
 
--- Dropdown to select a seed for auto-buying
-storeFolder:AddList({
-    text = "Select Seed for Auto-Buy",
-    values = seedList,
-    callback = function(value)
-        selectedSeed = value
-        print("Selected seed for auto-buy:", selectedSeed)
-    end,
-    flag = "seed_selector"
-})
-
--- Toggle to automatically buy the selected seed
-storeFolder:AddToggle({
-    text = "Auto Buy Selected Seed",
-    flag = "autobuy_toggle",
-    callback = function(v)
-        autoBuyActive = v
-        if not v then return end
-        
-        task.spawn(function()
-            while autoBuyActive do
-                local args = { [1] = selectedSeed }
-                game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RE.Purchase:FireServer(unpack(args))
-                task.wait(0.5)
-            end
-        end)
-    end
-})
-
--- =================================================================
+--================================================================
 -- Teleports Tab
--- =================================================================
-local teleportFolder = window:AddFolder("Teleports")
+--================================================================
+local teleportsTab = window:AddFolder("Teleports")
 
-local teleportLocations = { "Garden", "Seeds", "Sell", "Items", "Quests" }
+-- List of available teleport locations
+local teleportLocations = {"Garden", "Seeds", "Sell", "Items", "Quests"}
 
-for _, locationName in ipairs(teleportLocations) do
-    teleportFolder:AddButton({
-        text = "Teleport to " .. locationName,
-        flag = "teleport_" .. locationName,
+-- Create a button for each teleport location
+for _, location in ipairs(teleportLocations) do
+    teleportsTab:AddButton({
+        text = "Teleport to " .. location,
+        flag = "teleportBtn_" .. location,
         callback = function()
-            local args = { [1] = locationName }
-            game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.Teleport:FireServer(unpack(args))
-            print("Teleporting to " .. locationName)
+            print("Teleporting to:", location)
+            pcall(function()
+                game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.Teleport:FireServer(location)
+            end)
         end
     })
 end
 
--- =================================================================
--- Misc Tab
--- =================================================================
-local miscFolder = window:AddFolder("Misc")
+--================================================================
+-- Player Settings Tab
+--================================================================
+local playerTab = window:AddFolder("Player")
+local localPlayer = game:GetService("Players").LocalPlayer
 
-miscFolder:AddButton({
-    text = "Destroy GUI",
-    flag = "destroy_gui_button",
-    callback = function()
-        library:Close()
+playerTab:AddLabel({text = "Modify local player stats."})
+
+-- Slider to control WalkSpeed
+playerTab:AddSlider({
+    text = "WalkSpeed",
+    min = 16,  -- Default WalkSpeed
+    max = 250,
+    value = 16,
+    flag = "walkspeedSlider",
+    callback = function(speed)
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") then
+            localPlayer.Character.Humanoid.WalkSpeed = speed
+        end
     end
 })
 
--- Initialize the library to make the GUI visible
+-- Slider to control JumpPower
+playerTab:AddSlider({
+    text = "JumpPower",
+    min = 50,  -- Default JumpPower
+    max = 300,
+    value = 50,
+    flag = "jumppowerSlider",
+    callback = function(power)
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") then
+            -- Roblox now uses JumpHeight, but some games might still use JumpPower.
+            -- We will set both for compatibility.
+            localPlayer.Character.Humanoid.JumpPower = power
+            localPlayer.Character.Humanoid.JumpHeight = power / 2 -- A rough conversion
+        end
+    end
+})
+
+
+--================================================================
+-- Initialize the UI
+--================================================================
 library:Init()
+print("Farming Game Hub Loaded!")
