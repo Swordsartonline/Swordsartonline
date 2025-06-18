@@ -1,209 +1,128 @@
 --[[
-    Script:         Farming Game Helper
-    Author:         Swordsartonline (Built with AI assistance)
-    Version:        2.1 (Mobile Fix)
-    Description:    A GUI for a farming game with auto-collect, selling,
-                    and purchasing features, plus player mods.
-    Library:        Ionic by OpposedDev
-    How to Use:     Execute this script in a Roblox client executor.
-                    Click the gear icon on the right to open/close the GUI.
+    Script: Planting Simulator Helper
+    Description: A comprehensive GUI for a planting game, featuring auto-farming, teleports, and more.
+    Credits to the Tora Library creator.
 ]]
 
--- A "pcall" (protected call) is used to safely load the library.
-local success, library = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/OpposedDev/Ionic/refs/heads/main/source/ioniclibrary.lua"))()
-end)
+-- Load the UI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
 
-if not success or not library then
-    warn("Could not load the Ionic library. The script will not run. Error: " .. tostring(library))
-    return
-end
+-- Create the main window
+local window = library:CreateWindow("Planting Sim Helper")
 
---================================================================
---=[                      SERVICE & PLAYER SETUP                ]=
---================================================================
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+-- =================================================================
+-- Farming Tab
+-- =================================================================
+local farmingFolder = window:AddFolder("Farming")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-
-if not humanoid then
-    warn("Humanoid not found. Script terminated.")
-    return
-end
-
--- Store original stats for resetting later
-local originalWalkSpeed = humanoid.WalkSpeed
-local originalJumpPower = humanoid.JumpPower
-
--- Define paths to the game's remote events/functions for easy access
-local KnitPackage = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Knit")
-local PlantService = KnitPackage.Services.PlantService.RE
-local StoreService = KnitPackage.Services.StoreService
-
---================================================================
---=[                    GUI CREATION & TOGGLE ICON              ]=
---================================================================
-
--- Create the main window, but we won't show it yet.
-local window = library:createWindow({
-	Title = "Farming Helper",
-	Version = "v2.1",
-	UseCore = true,
-    -- [CHANGE 1] Set a specific, smaller size for the window to be mobile-friendly
-    Size = UDim2.fromOffset(360, 450)
-})
-
--- Start with the window hidden. The user will click the icon to open it.
-window.Container.Visible = false
-
--- Create a separate ScreenGui for our toggle button so it's always visible.
-local toggleGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-toggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-local toggleButton = Instance.new("ImageButton", toggleGui)
-toggleButton.Image = "rbxassetid://6032117424" -- A simple gear/settings icon
-toggleButton.Size = UDim2.fromOffset(48, 48)
--- [CHANGE 2] Positioned on the right, but moved down to avoid core buttons
-toggleButton.Position = UDim2.new(1, -58, 0, 70) 
-toggleButton.BackgroundTransparency = 1
-
-toggleButton.MouseButton1Click:Connect(function()
-	window.Container.Visible = not window.Container.Visible
-end)
-
-
---================================================================
---=[                    FARMING & UTILITY SECTION               ]=
---================================================================
-
-local farmingSection = window:createSection({
-	Name = "Farming"
-})
-
-farmingSection:createToggle({
-	Name = "Auto Collect Plants",
-	Flag = "autoCollect",
-	Default = false,
-	RBXConnection = "Heartbeat",
-	Callback = function()
-        if Workspace:FindFirstChild("Plant") then
-            for _, plant in ipairs(Workspace.Plant:GetChildren()) do
-                if plant:FindFirstChild("Fruit") then
-                    pcall(function()
-                        PlantService.TakePlant:FireServer(plant.Fruit)
-                    end)
-                end
-            end
-        end
-	end,
-})
-
-farmingSection:createButton({
-	Name = "Sell All Inventory",
-	Callback = function()
-		pcall(function()
-            StoreService.RF.Sell:InvokeServer()
-        end)
-	end,
-})
-
-
---================================================================
---=[                       SHOP / BUY SECTION                   ]=
---================================================================
-
-local shopSection = window:createSection({
-	Name = "Shop"
-})
-
-shopSection:createDivider({ Text = "Buy Seeds" })
-
-local seedsToBuy = {
+local seedList = {
     "Grass", "Sunflower", "Carrot", "Blueberry", "Strawberry", "Corn",
     "Apple", "Bamboo", "Eggplant", "Pineapple", "Tomato", "Pumpkin",
     "Banana", "Coconut", "Peach", "Grape", "Nasturtium", "Papaya"
 }
+local selectedSeed = seedList[1] -- Default to Grass
+local autoBuyActive = false
+local autoCollectActive = false
 
-for _, seedName in ipairs(seedsToBuy) do
-    shopSection:createButton({
-        Name = "Buy " .. seedName,
-        Callback = function()
-            pcall(function()
-                StoreService.RE.Purchase:FireServer(seedName)
-            end)
-        end,
+-- Dropdown to select a seed for auto-buying
+farmingFolder:AddList({
+    text = "Select Seed",
+    values = seedList,
+    callback = function(value)
+        selectedSeed = value
+        print("Selected seed for auto-buy:", selectedSeed)
+    end,
+    flag = "seed_selector"
+})
+
+-- Toggle to automatically buy the selected seed
+farmingFolder:AddToggle({
+    text = "Auto Buy Selected Seed",
+    flag = "autobuy_toggle",
+    callback = function(v)
+        autoBuyActive = v
+        if not v then return end -- Stop if toggled off
+        
+        -- Start the loop in a new thread to prevent freezing
+        task.spawn(function()
+            while autoBuyActive do
+                local args = { [1] = selectedSeed }
+                game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RE.Purchase:FireServer(unpack(args))
+                task.wait(0.5) -- Wait before buying again to avoid spam
+            end
+        end)
+    end
+})
+
+-- Toggle to automatically collect all plants
+farmingFolder:AddToggle({
+    text = "Auto Collect All",
+    flag = "autocollect_toggle",
+    callback = function(v)
+        autoCollectActive = v
+        if not v then return end -- Stop if toggled off
+
+        -- Start the loop in a new thread
+        task.spawn(function()
+            while autoCollectActive do
+                if workspace:FindFirstChild("Plant") then
+                    for i, plant in ipairs(workspace.Plant:GetChildren()) do
+                        if not autoCollectActive then break end -- Check if toggle was disabled during loop
+                        
+                        -- Fire the remote event to collect the plant
+                        game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.TakePlant:FireServer(plant)
+                        task.wait() -- Small delay between each plant
+                    end
+                end
+                task.wait(1) -- Wait 1 second before scanning for new plants
+            end
+        end)
+    end
+})
+
+-- Button to sell all items at once
+farmingFolder:AddButton({
+    text = "Sell All Items",
+    flag = "sellall_button",
+    callback = function()
+        -- InvokeServer is used for functions that return a value, but can be used like FireServer here
+        game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RF.Sell:InvokeServer()
+        print("Sell All command sent to server.")
+    end
+})
+
+-- =================================================================
+-- Teleports Tab
+-- =================================================================
+local teleportFolder = window:AddFolder("Teleports")
+
+local teleportLocations = { "Garden", "Seeds", "Sell", "Items", "Quests" }
+
+-- Create a button for each teleport location
+for _, locationName in ipairs(teleportLocations) do
+    teleportFolder:AddButton({
+        text = "Teleport to " .. locationName,
+        flag = "teleport_" .. locationName,
+        callback = function()
+            local args = { [1] = locationName }
+            game:GetService("ReplicatedStorage").Packages.Knit.Services.PlantService.RE.Teleport:FireServer(unpack(args))
+            print("Teleporting to " .. locationName)
+        end
     })
 end
 
+-- =================================================================
+-- Misc Tab
+-- =================================================================
+local miscFolder = window:AddFolder("Misc")
 
---================================================================
---=[                    PLAYER MODS SECTION                     ]=
---================================================================
-
-local playerSection = window:createSection({
-	Name = "Player Mods"
+miscFolder:AddButton({
+    text = "Destroy GUI",
+    flag = "destroy_gui_button",
+    callback = function()
+        library:Close()
+    end
 })
 
-playerSection:createToggle({
-	Name = "Enable WalkSpeed",
-	Flag = "speedEnabled",
-	Default = false,
-	Callback = function(value)
-		humanoid.WalkSpeed = value and window.Flags.speedSlider.Value or originalWalkSpeed
-	end,
-})
-
-playerSection:createSlider({
-	Name = "Speed",
-	Flag = "speedSlider",
-	Default = originalWalkSpeed,
-	Range = {originalWalkSpeed, 200},
-	Increment = 1,
-	Suffix = " studs/s",
-	Callback = function(value)
-		if window.Flags.speedEnabled.Value then
-			humanoid.WalkSpeed = value
-		end
-	end,
-})
-
-playerSection:createToggle({
-	Name = "Enable JumpPower",
-	Flag = "jumpEnabled",
-	Default = false,
-	Callback = function(value)
-		humanoid.JumpPower = value and window.Flags.jumpSlider.Value or originalJumpPower
-	end,
-})
-
-playerSection:createSlider({
-	Name = "Jump",
-	Flag = "jumpSlider",
-	Default = originalJumpPower,
-	Range = {originalJumpPower, 250},
-	Increment = 1,
-	Suffix = " power",
-	Callback = function(value)
-		if window.Flags.jumpEnabled.Value then
-			humanoid.JumpPower = value
-		end
-	end,
-})
-
-playerSection:createButton({
-	Name = "Reset Player Stats",
-	Callback = function()
-		humanoid.WalkSpeed = originalWalkSpeed
-		humanoid.JumpPower = originalJumpPower
-		window:setFlag("speedEnabled", false)
-		window:setFlag("jumpEnabled", false)
-		window:setFlag("speedSlider", originalWalkSpeed)
-		window:setFlag("jumpSlider", originalJumpPower)
-	end,
-})
-
-print("Farming Helper GUI v2.1 loaded. Click the gear icon on the right to open.")
+-- Initialize the library to make the GUI visible
+library:Init()
