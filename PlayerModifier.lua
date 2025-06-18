@@ -1,150 +1,214 @@
 --[[
-    Script:         Player Modifier GUI
-    Author:         (Your Name) - Based on a template
-    Description:    A simple GUI for modifying player WalkSpeed and JumpPower.
+    Script:         Farming Game Helper
+    Author:         Swordsartonline (Built with AI assistance)
+    Description:    A GUI for a farming game with auto-collect, selling,
+                    and purchasing features, plus player mods.
     Library:        Ionic by OpposedDev
     How to Use:     Execute this script in a Roblox client executor.
-                    The GUI can be opened/closed with the Right-Shift key.
+                    Click the icon on the screen to open/close the GUI.
 ]]
 
 -- A "pcall" (protected call) is used to safely load the library.
--- If the HttpGet fails (e.g., GitHub is down), it won't error the whole script.
 local success, library = pcall(function()
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/OpposedDev/Ionic/refs/heads/main/source/ioniclibrary.lua"))()
 end)
 
--- If the library failed to load, print an error and stop the script.
 if not success or not library then
-    warn("Could not load the Ionic library. The script will not run.")
-    warn("Error details:", library) -- This will print the error message from pcall
+    warn("Could not load the Ionic library. The script will not run. Error: " .. tostring(library))
     return
 end
 
 --================================================================
 --=[                      SERVICE & PLAYER SETUP                ]=
 --================================================================
-
--- Get essential Roblox services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
--- Get the local player and wait for their character and humanoid to exist.
--- This is crucial because a script can run before the player has fully spawned.
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
--- If for any reason the humanoid couldn't be found, stop the script.
 if not humanoid then
     warn("Humanoid not found. Script terminated.")
     return
 end
 
--- Store the player's original stats before we modify them.
--- This allows us to properly reset them later.
+-- Store original stats for resetting later
 local originalWalkSpeed = humanoid.WalkSpeed
 local originalJumpPower = humanoid.JumpPower
 
+-- Define paths to the game's remote events/functions for easy access
+local KnitPackage = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Knit")
+local PlantService = KnitPackage.Services.PlantService.RE
+local StoreService = KnitPackage.Services.StoreService
 
 --================================================================
---=[                          GUI CREATION                      ]=
+--=[                    GUI CREATION & TOGGLE ICON              ]=
 --================================================================
 
--- Create the main window for the GUI
+-- Create the main window, but we won't show it yet.
 local window = library:createWindow({
-	Title = "Player Modifier",
-	Version = "v1.1",
-	RestoreKeybind = Enum.KeyCode.RightShift, -- Key to open/close the GUI
-	UseCore = true, -- Places the GUI in CoreGui to protect it
+	Title = "Farming Helper",
+	Version = "v2.0",
+    -- No RestoreKeybind, we are making our own button for mobile
+	UseCore = true,
 })
 
--- Create a section within the window to organize our controls
+-- Start with the window hidden. The user will click the icon to open it.
+-- We access the main GUI frame through 'window.Container'.
+window.Container.Visible = false
+
+-- Create a separate ScreenGui for our toggle button so it's always visible.
+local toggleGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+toggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local toggleButton = Instance.new("ImageButton", toggleGui)
+toggleButton.Image = "rbxassetid://6032117424" -- A simple gear/settings icon
+toggleButton.Size = UDim2.fromOffset(48, 48)
+toggleButton.Position = UDim2.new(1, -58, 0, 10) -- Top-right corner
+toggleButton.BackgroundTransparency = 1
+
+-- This function runs when the icon is clicked
+toggleButton.MouseButton1Click:Connect(function()
+    -- Toggle the visibility of the main window
+	window.Container.Visible = not window.Container.Visible
+end)
+
+
+--================================================================
+--=[                    FARMING & UTILITY SECTION               ]=
+--================================================================
+
+local farmingSection = window:createSection({
+	Name = "Farming"
+})
+
+-- A toggle for automatically collecting ripe plants
+farmingSection:createToggle({
+	Name = "Auto Collect Plants",
+	Flag = "autoCollect",
+	Default = false,
+	RBXConnection = "Heartbeat", -- Runs the callback every frame when active
+	Callback = function()
+        -- The game stores plants in a "Plant" folder in the workspace.
+        -- We loop through everything in that folder to collect them all.
+        if Workspace:FindFirstChild("Plant") then
+            for _, plant in ipairs(Workspace.Plant:GetChildren()) do
+                -- We check if the plant has a "Fruit" part, which means it's ready.
+                if plant:FindFirstChild("Fruit") then
+                    -- Use a pcall to prevent one bad plant from erroring the whole script
+                    pcall(function()
+                        PlantService.TakePlant:FireServer(plant.Fruit)
+                    end)
+                end
+            end
+        end
+	end,
+})
+
+-- A simple button to sell everything in the inventory
+farmingSection:createButton({
+	Name = "Sell All Inventory",
+	Callback = function()
+		pcall(function()
+            StoreService.RF.Sell:InvokeServer()
+        end)
+	end,
+})
+
+
+--================================================================
+--=[                       SHOP / BUY SECTION                   ]=
+--================================================================
+
+local shopSection = window:createSection({
+	Name = "Shop"
+})
+
+shopSection:createDivider({ Text = "Buy Seeds" })
+
+-- A list of all available seeds to buy.
+-- Using a table like this makes it easy to add more seeds later!
+local seedsToBuy = {
+    "Grass", "Sunflower", "Carrot", "Blueberry", "Strawberry", "Corn",
+    "Apple", "Bamboo", "Eggplant", "Pineapple", "Tomato", "Pumpkin",
+    "Banana", "Coconut", "Peach", "Grape", "Nasturtium", "Papaya"
+}
+
+-- Loop through the table and create a button for each seed
+for _, seedName in ipairs(seedsToBuy) do
+    shopSection:createButton({
+        Name = "Buy " .. seedName,
+        Callback = function()
+            pcall(function()
+                StoreService.RE.Purchase:FireServer(seedName)
+            end)
+        end,
+    })
+end
+
+
+--================================================================
+--=[                    PLAYER MODS SECTION                     ]=
+--================================================================
+
 local playerSection = window:createSection({
 	Name = "Player Mods"
 })
 
--- Create a visual divider to separate groups of options
-playerSection:createDivider({
-	Text = "Movement"
-})
-
--- Create a toggle switch to enable/disable the WalkSpeed modification
 playerSection:createToggle({
 	Name = "Enable WalkSpeed",
-	Flag = "speedEnabled", -- A unique ID to reference this toggle later
+	Flag = "speedEnabled",
 	Default = false,
 	Callback = function(value)
-		if value == true then
-			-- When toggled ON, set the WalkSpeed to the slider's current value.
-            -- We access the slider's value using window.Flags.
-			humanoid.WalkSpeed = window.Flags.speedSlider.Value
-		else
-			-- When toggled OFF, reset the WalkSpeed to the original value.
-			humanoid.WalkSpeed = originalWalkSpeed
-		end
+		humanoid.WalkSpeed = value and window.Flags.speedSlider.Value or originalWalkSpeed
 	end,
 })
 
--- Create a slider to choose the desired WalkSpeed
 playerSection:createSlider({
 	Name = "Speed",
-	Flag = "speedSlider", -- A unique ID to reference this slider
-	Default = originalWalkSpeed, -- The slider starts at the player's normal speed
-	Range = {originalWalkSpeed, 200}, -- Min speed is default, max is 200
+	Flag = "speedSlider",
+	Default = originalWalkSpeed,
+	Range = {originalWalkSpeed, 200},
 	Increment = 1,
-	Suffix = " studs/s", -- Text that appears after the number
+	Suffix = " studs/s",
 	Callback = function(value)
-		-- This function runs every time the slider is moved.
-		-- We only change the speed if the main toggle is already ON.
-		if window.Flags.speedEnabled.Value == true then
+		if window.Flags.speedEnabled.Value then
 			humanoid.WalkSpeed = value
 		end
 	end,
 })
 
--- Create a toggle switch to enable/disable the JumpPower modification
 playerSection:createToggle({
 	Name = "Enable JumpPower",
-	Flag = "jumpEnabled", -- Unique ID for this toggle
+	Flag = "jumpEnabled",
 	Default = false,
 	Callback = function(value)
-		if value == true then
-			humanoid.JumpPower = window.Flags.jumpSlider.Value
-		else
-			humanoid.JumpPower = originalJumpPower
-		end
+		humanoid.JumpPower = value and window.Flags.jumpSlider.Value or originalJumpPower
 	end,
 })
 
--- Create a slider to choose the desired JumpPower
 playerSection:createSlider({
 	Name = "Jump",
-	Flag = "jumpSlider", -- Unique ID for this slider
+	Flag = "jumpSlider",
 	Default = originalJumpPower,
 	Range = {originalJumpPower, 250},
 	Increment = 1,
 	Suffix = " power",
 	Callback = function(value)
-		if window.Flags.jumpEnabled.Value == true then
+		if window.Flags.jumpEnabled.Value then
 			humanoid.JumpPower = value
 		end
 	end,
 })
 
--- Create another divider for utility buttons
-playerSection:createDivider({
-	Text = "Utility"
-})
-
--- Create a button to reset all settings and stats
+-- A button to reset only the player stats
 playerSection:createButton({
-	Name = "Reset All Stats",
+	Name = "Reset Player Stats",
 	Callback = function()
-		-- Reset player stats to their original values
 		humanoid.WalkSpeed = originalWalkSpeed
 		humanoid.JumpPower = originalJumpPower
-
-		-- Reset the GUI controls to their default state
-        -- The library's :setFlag method is used to programmatically change a control's value.
 		window:setFlag("speedEnabled", false)
 		window:setFlag("jumpEnabled", false)
 		window:setFlag("speedSlider", originalWalkSpeed)
@@ -152,5 +216,5 @@ playerSection:createButton({
 	end,
 })
 
--- A final print statement to let the user know the script has loaded successfully.
-print("Player Modifier GUI loaded successfully. Press Right-Shift to open.")
+-- Final confirmation message in the console
+print("Farming Helper GUI loaded. Click the icon in the top-right to open.")
