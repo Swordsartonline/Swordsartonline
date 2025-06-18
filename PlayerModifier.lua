@@ -1,14 +1,12 @@
 --[[
     Script: Farming Game Hub
     Description: A feature-rich script for the farming game, providing autofarming,
-    teleports, player modifications, and item exploits.
+    teleports, player modifications, and advanced exploits.
     UI Library: Tora-Library by liebertsx
 ]]
 
 -- Load the Tora UI Library
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/liebertsx/Tora-Library/main/src/librarynew", true))()
-
--- Create the main window for the script
 local window = library:CreateWindow("Farming Game Hub")
 
 --================================================================
@@ -16,7 +14,6 @@ local window = library:CreateWindow("Farming Game Hub")
 --================================================================
 local mainTab = window:AddFolder("Main")
 
--- (Auto-collect, Sell All, Buy Seed code is the same as before)
 local autoCollectEnabled = false
 mainTab:AddToggle({
     text = "Auto Collect All Plants",
@@ -40,7 +37,7 @@ task.spawn(function()
 end)
 
 mainTab:AddButton({
-    text = "Sell All Items",
+    text = "Sell All (Legit)",
     flag = "sellAllButton",
     callback = function()
         pcall(function()
@@ -65,88 +62,63 @@ mainTab:AddList({
 })
 
 --================================================================
--- Item Exploits Tab (NEW!)
+-- Exploits Tab
 --================================================================
 local exploitsTab = window:AddFolder("Exploits")
 
-exploitsTab:AddLabel({
-	text = "WARNING: This is experimental."
-})
-exploitsTab:AddLabel({
-	text = "You need a Remote Spy to find an event that gives items."
+-- NEW and much more likely to work!
+exploitsTab:AddButton({
+    text = "Sell 'God' Plant (Instant Cash)",
+    flag = "sellGodPlant",
+    callback = function()
+        print("Crafting fake plant payload...")
+
+        -- From the script, we know a plant's data is formatted as "Weight_MutationID"
+        -- Mutation IDs: 1 = None, 2 = Gold (x15), 3 = Rainbow (x30)
+        -- We will create a fake Papaya (highest base sell) with 500% weight and a Rainbow mutation.
+        local fakePlantID = "500_3" -- 500% weight, Rainbow mutation
+
+        -- The server likely expects a table where the key is the plant name
+        -- and the value is a list of all instances of that plant you own.
+        -- We'll just send our one fake plant.
+        local fakeInventoryPayload = {
+            ["Papaya"] = {fakePlantID}
+        }
+
+        print("Attempting to invoke Sell remote with fake inventory...")
+        local sellRemote = game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RF.Sell
+        
+        -- We use a pcall in case it errors, which it will if the server is secure.
+        local success, result = pcall(function()
+            return sellRemote:InvokeServer(fakeInventoryPayload)
+        end)
+
+        if success then
+            print("Sell command successfully sent! Money gained:", result or "Unknown")
+        else
+            print("Sell command failed. The server is likely protected against this. Error:", result)
+        end
+    end
 })
 
---[[
-    !!!! IMPORTANT !!!!
-    You MUST replace this with the real remote path you find with a remote spy.
-    It will likely be in ReplicatedStorage.Packages.Knit.Services...
-    Try looking for Remotes named: GiveItem, AddItem, AdminGive, Reward, etc.
-]]
+exploitsTab:AddLabel({text = "--- Old Item Spawner (Likely Patched) ---"})
 local placeholderRemotePath = game:GetService("ReplicatedStorage").Packages.Knit.Services.StoreService.RE.AdminGiveItem -- This is a GUESS.
 
 exploitsTab:AddButton({
     text = "Attempt to Spawn God Sprinkler",
     flag = "spawnGodSprinkler",
     callback = function()
-        -- We construct a fake item table based on the structure we found.
-        local fakeGodSprinkler = {
-            Key = "Sprinkler",
-            Name = "God Sprinkler",
-            Description = "Waters everything, forever.",
-            Min = 1,
-            Max = 1,
-            Price = 1, -- Set to 1 just in case
-            Odd = 100,
-            Count = 1,
-            Info = {
-                Speed = 999,      -- Insanely fast plant growth
-                FruitSize = 500,  -- Massive fruit
-                Zone = 1000,      -- Covers almost the entire map
-                Length = 9999999, -- Basically infinite duration
-            }
-        }
-
-        print("Attempting to fire remote with custom item data...")
-        pcall(function()
-            -- We fire the remote with our fake item table as the argument.
-            placeholderRemotePath:FireServer(fakeGodSprinkler)
-        end)
-        print("Command sent. Check your inventory.")
-    end
-})
-
-exploitsTab:AddButton({
-    text = "Attempt to Spawn God Watering Can",
-    flag = "spawnGodWaterCan",
-    callback = function()
-        local fakeGodCan = {
-            Key = "WateringCan",
-            Name = "God Can",
-            Description = "Infinite uses, instant growth.",
-            Min = 1,
-            Max = 1,
-            Price = 1,
-            Odd = 100,
-            Count = 999999, -- Infinite uses
-            Info = {
-                Strength = 9999 -- Insane growth speed
-            }
-        }
-        
-        print("Attempting to fire remote with custom item data...")
-        pcall(function()
-            placeholderRemotePath:FireServer(fakeGodCan)
-        end)
-        print("Command sent. Check your inventory.")
+        local fakeGodSprinkler = { Key = "Sprinkler", Name = "God Sprinkler", Description = "Waters everything, forever.", Min = 1, Max = 1, Price = 1, Odd = 100, Count = 1, Info = { Speed = 999, FruitSize = 500, Zone = 1000, Length = 9999999 } }
+        pcall(function() placeholderRemotePath:FireServer(fakeGodSprinkler) end)
+        print("God Sprinkler command sent.")
     end
 })
 
 
 --================================================================
--- Teleports Tab
+-- Teleports Tab & Player Tab (Same as before)
 --================================================================
 local teleportsTab = window:AddFolder("Teleports")
-
 local teleportLocations = {"Garden", "Seeds", "Sell", "Items", "Quests"}
 for _, location in ipairs(teleportLocations) do
     teleportsTab:AddButton({
@@ -160,12 +132,8 @@ for _, location in ipairs(teleportLocations) do
     })
 end
 
---================================================================
--- Player Settings Tab
---================================================================
 local playerTab = window:AddFolder("Player")
 local localPlayer = game:GetService("Players").LocalPlayer
-
 playerTab:AddSlider({
     text = "WalkSpeed", min = 16, max = 250, value = 16,
     flag = "walkspeedSlider",
@@ -175,7 +143,6 @@ playerTab:AddSlider({
         end
     end
 })
-
 playerTab:AddSlider({
     text = "JumpPower", min = 50, max = 300, value = 50,
     flag = "jumppowerSlider",
@@ -191,4 +158,4 @@ playerTab:AddSlider({
 -- Initialize the UI
 --================================================================
 library:Init()
-print("Farming Game Hub Loaded! Check the new 'Exploits' tab.")
+print("Farming Game Hub Updated! Check the 'Exploits' tab for the new Sell exploit.")
