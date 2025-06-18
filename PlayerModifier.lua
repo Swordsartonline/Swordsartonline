@@ -1,4 +1,43 @@
 --[[
+    Script: Auto-Claim All Free Forever Pack Items
+    Description: Based on the discovery of ForeverPackClient, this script
+                 will automatically try to claim all free items from the pack.
+]]
+
+-- Access the game's framework and services
+local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
+local ForeverPackService = Knit.GetService("ForeverPackService")
+local claimRemote = ForeverPackService.Claim -- This is the RemoteEvent we need
+
+-- --- Configuration ---
+-- A list of all the item IDs we want to try and claim.
+-- Based on your screenshot, the free items are in slots 2, 3, and 4.
+local freeItemIDs = {2, 3, 4} 
+
+local checkInterval = 30 -- Check every 30 seconds to be safe.
+
+print("Auto-Claim for ALL FREE Forever Pack items is running.")
+
+-- The main loop that will run forever
+task.spawn(function()
+    while true do
+        print("Attempting to claim free Forever Pack rewards...")
+        
+        -- Loop through our list of free item IDs
+        for _, itemID in ipairs(freeItemIDs) do
+            -- Fire the remote event for each free item.
+            -- The server will grant the item if the cooldown is over.
+            claimRemote:Fire(itemID)
+            task.wait(0.1) -- Small delay between each attempt
+        end
+        
+        print("Claim attempt finished. Waiting for the next check in " .. checkInterval .. " seconds.")
+        task.wait(checkInterval)
+    end
+end)
+
+-- This script is now much more powerful because it targets all the free items.
+-- You can add this to your main GUI script.--[[
     Script: Planting Simulator Helper (v2)
     Description: A comprehensive GUI for a planting game, with corrected and new features.
     Credits to the Tora Library creator.
